@@ -40,7 +40,7 @@ class AntColony(object):
 		self.create_ants_(self.n_ants)
 		self.init_pheromone_matrix_(weight_matrix, b_node, e_node)
 		
-		last = np.array([0,0,0,0,0,0,0])
+		last = np.zeros(20)
 		last_idx = 0
 
 		best_ants = []
@@ -52,7 +52,7 @@ class AntColony(object):
 			best_ant = max(self.ants_, key=attrgetter('path_length_'))
 			best_ants.append(copy.copy(best_ant))
 			
-			print i, best_ant.path_length_
+			#print i, best_ant.path_length_
 			
 			# reinforcing the best path of the current iteration
 			#idx, delta = best_ant.release_pheromone()
@@ -77,10 +77,7 @@ class AntColony(object):
 	
 		ants = self.ants_
 		if k_top > 0:
-			#self.ants_.sort(key=attrgetter('path_length_'),reverse=False)
 			ants = heapq.nlargest( k_top, self.ants_ )
-
-			print ants[0].path_length_,ants[1].path_length_
 
 		for ant in ants:
 			# it is not a good ant
@@ -91,9 +88,7 @@ class AntColony(object):
 
 			idx, delta = ant.release_pheromone()			
 			p[idx] += delta
-			#print idx, delta
 
-		print "evap : ", self.evaporation_rate
 		self.pheromone_matrix_ = (1 - self.evaporation_rate)*self.pheromone_matrix_ + p
 
 	def create_ants_(self, n_ants):
@@ -162,7 +157,6 @@ class Ant(object):
 		p = p[nin_path]/float(p[nin_path].sum())
 
 		return np.random.choice(np.arange(n)[nin_path], 1, p=p)[0]
-
 
 	def __cmp__(self, other):
 		return cmp(self.path_length_, other.path_length_)
