@@ -40,6 +40,9 @@ class AntColony(object):
 		self.create_ants_(self.n_ants)
 		self.init_pheromone_matrix_(weight_matrix, b_node, e_node)
 		
+		last = np.array([0,0,0,0,0,0,0])
+		last_idx = 0
+
 		best_ants = []
 		for i in xrange(self.iterations):
 			
@@ -55,6 +58,12 @@ class AntColony(object):
 			#idx, delta = best_ant.release_pheromone()
 			#self.pheromone_matrix_[idx] += self.n_ants*delta
 			#print delta
+			
+			last[last_idx] = best_ant.path_length_
+			last_idx = (last_idx + 1)%len(last)
+			# early stop
+			if np.std(last) == 0:
+				break
 
 
 		return max(best_ants, key=attrgetter('path_length_'))
@@ -70,7 +79,7 @@ class AntColony(object):
 		if k_top > 0:
 			#self.ants_.sort(key=attrgetter('path_length_'),reverse=False)
 			ants = heapq.nlargest( k_top, self.ants_ )
-			
+
 			print ants[0].path_length_,ants[1].path_length_
 
 		for ant in ants:
@@ -108,7 +117,13 @@ class AntColony(object):
 
 
 class Ant(object):
-	"""docstring for Ant"""
+	"""It's artificial agent responsible for walking
+		on the graph from a node S to a node T.
+		It performs a random walk accordingly to
+		a transition matrix which is obtained from
+		the pheromone matrix depending on the probability
+		rule described in the method next_node_
+	"""
 	def __init__(self):
 		super(Ant, self).__init__()
 		self.path_length_ = 0
@@ -133,8 +148,6 @@ class Ant(object):
 				next_node = self.next_node_(pheromone_matrix_, current_node, nin_path)
 				path = np.append(path, [[current_node, next_node]], axis=0)
 				path_length = path_length + weight_matrix[current_node,next_node]
-				if weight_matrix[current_node,next_node] == 0:
-					print "as"
 			except Exception, e: 
 				path_length = 1
 				break
