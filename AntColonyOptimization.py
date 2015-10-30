@@ -3,6 +3,8 @@ import math
 from operator import attrgetter
 import copy
 
+import heapq
+
 import matplotlib.pyplot as plt
 
 def load_graph_file(file_str):
@@ -23,7 +25,7 @@ def load_graph_file(file_str):
 class AntColony(object):
 
 	"""docstring for AntColony"""
-	def __init__(self, n_ants = 100, iterations = 100, evaporation_rate = 0.3):
+	def __init__(self, n_ants = 100, iterations = 100, evaporation_rate = 0.3, k = 10):
 		super(AntColony, self).__init__()
 		self.pheromone_matrix_ = None
 		
@@ -31,17 +33,18 @@ class AntColony(object):
 		self.evaporation_rate = evaporation_rate
 
 		self.n_ants = n_ants
+		self.k = k
 
 
 	def meta_heuristic(self, weight_matrix, b_node, e_node):
 		self.create_ants_(self.n_ants)
-		self.init_pheromone_matrix_(weight_matrix)
+		self.init_pheromone_matrix_(weight_matrix, b_node, e_node)
 		
 		best_ants = []
 		for i in xrange(self.iterations):
 			
 			self.generate_solutions_(weight_matrix, b_node, e_node)
-			self.pheromone_update_()
+			self.pheromone_update_(self.k)
 			
 			best_ant = max(self.ants_, key=attrgetter('path_length_'))
 			best_ants.append(copy.copy(best_ant))
@@ -49,9 +52,9 @@ class AntColony(object):
 			print i, best_ant.path_length_
 			
 			# reinforcing the best path of the current iteration
-			idx, delta = best_ant.release_pheromone()
-			self.pheromone_matrix_[idx] += self.n_ants*delta
-			print delta
+			#idx, delta = best_ant.release_pheromone()
+			#self.pheromone_matrix_[idx] += self.n_ants*delta
+			#print delta
 
 
 		return max(best_ants, key=attrgetter('path_length_'))
@@ -60,10 +63,17 @@ class AntColony(object):
 		for ant in self.ants_:
 			ant.random_walk(self.pheromone_matrix_, weight_matrix, b_node, e_node)
 
-	def pheromone_update_(self):
+	def pheromone_update_(self, k_top = 0):
 		p = self.pheromone_matrix_ * 0.0
 	
-		for ant in self.ants_:
+		ants = self.ants_
+		if k_top > 0:
+			#self.ants_.sort(key=attrgetter('path_length_'),reverse=False)
+			ants = heapq.nlargest( k_top, self.ants_ )
+			
+			print ants[0].path_length_,ants[1].path_length_
+
+		for ant in ants:
 			# it is not a good ant
 			# therefore, it doesnt
 			# deposit pheromone
@@ -74,20 +84,27 @@ class AntColony(object):
 			p[idx] += delta
 			#print idx, delta
 
-		#print self.pheromone_matrix_
+		print "evap : ", self.evaporation_rate
 		self.pheromone_matrix_ = (1 - self.evaporation_rate)*self.pheromone_matrix_ + p
-		#print self.pheromone_matrix_
 
 	def create_ants_(self, n_ants):
 		self.ants_ = []
 		for i in range(n_ants):
 			self.ants_.append(Ant())
 
-	def init_pheromone_matrix_(self, weight_matrix):
+	def init_pheromone_matrix_(self, weight_matrix, b_node, e_node, epsilon = 1.0):
 		if not isinstance(weight_matrix, np.ndarray):
 			raise Exception('weight_matrix must be of ndarray type')
 		
-		self.pheromone_matrix_ = (weight_matrix != 0) * 0.1
+		self.pheromone_matrix_ = (weight_matrix != 0) * float(epsilon)
+
+		self.generate_solutions_(weight_matrix, b_node, e_node)
+
+		aux = self.evaporation_rate
+		self.evaporation_rate = 0.0;
+		self.pheromone_update_(self.k)
+		self.evaporation_rate = aux
+
 
 
 class Ant(object):
@@ -132,3 +149,7 @@ class Ant(object):
 		p = p[nin_path]/float(p[nin_path].sum())
 
 		return np.random.choice(np.arange(n)[nin_path], 1, p=p)[0]
+
+
+	def __cmp__(self, other):
+		return cmp(self.path_length_, other.path_length_)
