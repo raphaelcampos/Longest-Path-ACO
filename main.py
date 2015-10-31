@@ -16,13 +16,13 @@ parser.add_argument("-i", "--iterations", type=int, help='Number of iteration to
 
 parser.add_argument("-e", "--evaporation_rate", type=float, help='The rate in which pheromone will evaporate from the trail per iteration (Default:0.1). It controls the convergence.', default=0.1)
 
-parser.add_argument("-j", "--jobs", type=int, help='Number of CPUs available to parallelize the execution (Default:1). If -1 is given then it gets all CPUs available', default=1)
+#parser.add_argument("-j", "--jobs", type=int, help='Number of CPUs available to parallelize the execution (Default:1). If -1 is given then it gets all CPUs available', default=1)
 
 parser.add_argument("-k", "--k_top", type=int, help='the k best ants will deposit pheromone on trail (Default:10). If k=0 then all ants will deposit pheromone.', default=10)
 
-parser.add_argument("-a", "--alpha", type=float, help='Controls the influence of the amount of pherome over the propability of moving to the next node (Default: 1).', default=1.0)
+#parser.add_argument("-a", "--alpha", type=float, help='Controls the influence of the amount of pherome over the propability of moving to the next node (Default: 1).', default=1.0)
 
-parser.add_argument("-b", "--beta", type=float, help='Controls the influence of the heuristic values over the propability of moving to the next node (Default: 1).', default=1.0)
+#parser.add_argument("-b", "--beta", type=float, help='Controls the influence of the heuristic values over the propability of moving to the next node (Default: 1).', default=1.0)
 
 parser.add_argument("--trials", type=int, help='Number of trials (Default:30).', default=30)
 
@@ -36,13 +36,12 @@ weight_matrix, b_node, e_node = aco.load_graph_file(args.input)
 
 output = md5.new(str(vars(args))).hexdigest()[:5] + "-" + md5.new(str(time.gmtime())).hexdigest()[:5] + ".out"
 
-
 print "Params : ", vars(args)
 
-out = aco.Outputer()
-print out.format("results/12c1e778ed16979c7124fc03b3ed9db3")
-exit()
-colony = aco.AntColony(n_ants=args.n_ants, iterations=args.iterations, evaporation_rate=args.evaporation_rate, k=args.k_top, logger=aco.Logger(args.dump_folder + "/" + output, append=True))
+#out = aco.Outputer()
+#print out.format("results/12c1e778ed16979c7124fc03b3ed9db3")
+#exit()
+colony = aco.AntColony(n_ants=args.n_ants, iterations=args.iterations, evaporation_rate=args.evaporation_rate, k=args.k_top, logger=aco.Logger(args.dump_folder + "/" + output, append=True), random_state=42)
 
 colony.logger.running_setup(vars(args))
 
@@ -54,7 +53,6 @@ for t in range(args.trials):
 	lengths[t] = best_ant.path_length_
 	#"Trial #%d - Length : %d" % 
 	print (t + 1), best_ant.path_length_
-	
 
 if args.serialize:
 	pickle.dump(ants, open(args.dump_folder + "/" + output + "_solutions", 'w'))

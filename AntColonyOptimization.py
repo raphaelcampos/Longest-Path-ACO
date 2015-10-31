@@ -162,7 +162,7 @@ class Logger(object):
 class AntColony(object):
 
 	"""docstring for AntColony"""
-	def __init__(self, n_ants = 100, iterations = 100, evaporation_rate = 0.3, k = 10, logger=None):
+	def __init__(self, n_ants = 100, iterations = 100, evaporation_rate = 0.3, k = 10, logger=None, random_state=None):
 		super(AntColony, self).__init__()
 		self.pheromone_matrix_ = None
 		
@@ -178,6 +178,9 @@ class AntColony(object):
 		
 		self.logger = logger
 
+		np.random.seed(random_state)
+		self.random_state = random_state
+		
 
 	def meta_heuristic(self, weight_matrix, b_node, e_node):
 
