@@ -1,12 +1,13 @@
-import numpy as np
-import math
-from operator import attrgetter
 import copy
-
 import heapq
+import math
 
+import numpy as np
 import matplotlib.pyplot as plt
 
+from operator import attrgetter
+from prettytable import PrettyTable
+ 
 def load_graph_file(file_str):
 	with open(file_str, 'r') as f:
 		data = f.readlines()
@@ -22,10 +23,146 @@ def load_graph_file(file_str):
 	return weight_matrix, obj[0], obj[1]
 
 
+class Extractor(object):
+	"""docstring for Extractor"""
+	def __init__(self, header=False, comments="#", delimiter=" "):
+		super(Extractor, self).__init__()
+		self.header = header
+		self.comments = comments
+		self.delimiter = delimiter
+
+	def extract(self, file_str):
+		ext = []
+		with open(file_str, 'r') as f:
+			data = f.readlines()
+			if self.header:
+				ext.append(data[0].split(self.comments)[1])
+				data = data[1:]
+
+			dump = None
+			for d in data:
+				d = np.array(d.split(self.delimiter), dtype=float)
+				dump = np.vstack((dump, d)) if not (dump == None) else d
+
+			ext.append(dump)
+			
+		return ext
+
+class Outputer(object):
+	"""docstring for Outputer"""
+	def __init__(self):
+		super(Outputer, self).__init__()
+
+	def format(self, input_obj):
+		if isinstance(input_obj, Logger):
+			return self._format_logger(input_obj)
+		elif isinstance(input_obj, str):
+			return self._format_output(input_obj)
+		else:
+			raise Exception('Method cannot handle input.')
+	
+	def _format(self, setup, dump):
+		out = ""
+
+		params = PrettyTable(["Parameter", "Value"])
+		for k, v in setup.iteritems():
+			params.add_row([k,v])
+
+		out += params.get_string()
+		out = out + "\n\n"
+
+		split_points = np.where(dump[:,0] == 0)[0][1:]
+		
+		if split_points == []:
+			trails = [dump]		
+		else:
+			trails = np.split(dump, split_points)
+
+		results = PrettyTable(["Trial", "Iterations", "Best solution"])		
+		n_trials = len(trails)
+		stops = np.zeros(n_trials)
+		best_solution = np.zeros(n_trials)
+		#out += "Trial\t|Converged\t|Best solution\t\n"
+		for i, t in enumerate(trails):
+			stops[i] = t[-1,0]
+			best_solution[i] = max(t[:,1])
+			#out += "#%d\t|" % (i + 1)
+			#out += "%f\t|" % stops[i]
+			#out += "%d\t\n" % best_solution[i]
+			results.add_row([i + 1, stops[i], best_solution[i]])
+
+		results.add_row(["Avg", np.average(stops), np.average(best_solution)])
+		
+		results
+		out += results.get_string()
+		#out += "\tAvg\t|\t%f\t" % np.average(stops)#, np.std(stops)
+		# np.average(best_solution) np.std(best_solution)  
+
+		return out
+
+	def _format_logger(self, logger):
+		return self._format(logger.setup, logger.dump)
+
+	def _format_output(self, output_file, extractor=Extractor(header=True)):
+		setup, dump = extractor.extract(output_file)
+		return self._format(eval(setup), dump)
+
+class Logger(object):
+	"""docstring for Logger"""
+	def __init__(self, dump_file="", append=False, np_save=True, outputer=None):
+		super(Logger, self).__init__()
+		
+		self.dump_file = dump_file
+		self.append = append
+		self.np_save = np_save
+		self.dump = None
+		self.f = None
+
+		if outputer == None:
+			self.outputer = Outputer()
+		else:
+			self.outputer = outputerself.outputer
+
+	def init(self):
+		self.reset()
+		if self.append and not (self.dump_file == ""):
+			self.f=open(self.dump_file, 'ab')
+
+		self.first = True
+
+
+	def reset(self):
+		self.dump = None
+		if self.f:
+			self.f.close()
+
+	def running_setup(self, setup):
+		self.setup = setup
+		
+	def collect(self, dump_iteration):
+		if self.append:
+			if self.f.closed:
+				self.f=open(self.dump_file, 'ab')
+
+			if self.first:
+				header = str(self.setup)
+				np.savetxt(self.f, dump_iteration, fmt='%d',header=header)
+				self.first = False
+			else:
+				np.savetxt(self.f, dump_iteration, fmt='%d')
+			
+		if not (self.dump == None):
+			self.dump = np.vstack((self.dump, dump_iteration))
+		else:
+			self.dump = dump_iteration
+
+	def running_summary(self):
+		return self.outputer.format(self)
+
 class AntColony(object):
 
 	"""docstring for AntColony"""
-	def __init__(self, n_ants = 100, iterations = 100, evaporation_rate = 0.3, k = 10):
+	def __init__(self, n_ants = 100, iterations = 100, evaporation_rate = 0.3, k = 10, logger=None):
 		super(AntColony, self).__init__()
 		self.pheromone_matrix_ = None
 		
@@ -35,8 +172,15 @@ class AntColony(object):
 		self.n_ants = n_ants
 		self.k = k
 
+		# initialize logger if one is given
+		if not (logger == None):
+			logger.init()
+		
+		self.logger = logger
+
 
 	def meta_heuristic(self, weight_matrix, b_node, e_node):
+
 		self.create_ants_(self.n_ants)
 		self.init_pheromone_matrix_(weight_matrix, b_node, e_node)
 		
@@ -52,19 +196,14 @@ class AntColony(object):
 			best_ant = max(self.ants_, key=attrgetter('path_length_'))
 			best_ants.append(copy.copy(best_ant))
 			
-			#print i, best_ant.path_length_
-			
-			# reinforcing the best path of the current iteration
-			#idx, delta = best_ant.release_pheromone()
-			#self.pheromone_matrix_[idx] += self.n_ants*delta
-			#print delta
-			
+			# dump to log file if logger was initialized
+			self._dump(i)
+
 			last[last_idx] = best_ant.path_length_
 			last_idx = (last_idx + 1)%len(last)
 			# early stop
 			if np.std(last) == 0:
 				break
-
 
 		return max(best_ants, key=attrgetter('path_length_'))
 
@@ -109,7 +248,17 @@ class AntColony(object):
 		self.pheromone_update_(self.k)
 		self.evaporation_rate = aux
 
+	def _dump(self, iteration):
+		if not (self.logger == None):
+			path_lengths = np.array([ant.path_length_ for ant in self.ants_])
+			
+			avg_path = np.average(path_lengths)
+			std_path = np.std(path_lengths)
+			best_ant = max(self.ants_, key=attrgetter('path_length_'))
+			worst_ant = min(self.ants_, key=attrgetter('path_length_'))
 
+			dump = [iteration, best_ant.path_length_,  worst_ant.path_length_, avg_path, std_path]
+			self.logger.collect(np.array(dump).reshape(1,len(dump)))
 
 class Ant(object):
 	"""It's artificial agent responsible for walking
@@ -160,3 +309,4 @@ class Ant(object):
 
 	def __cmp__(self, other):
 		return cmp(self.path_length_, other.path_length_)
+
