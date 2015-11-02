@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import copy
 import heapq
 import math
@@ -8,6 +9,16 @@ import matplotlib.pyplot as plt
 from operator import attrgetter
 from prettytable import PrettyTable
  
+from threading import Thread
+
+from multiprocessing import cpu_count
+from multiprocessing import Pool
+from multiprocessing import Process, Queue
+
+import time
+
+default_nprocs = cpu_count()
+
 def load_graph_file(file_str):
 	with open(file_str, 'r') as f:
 		data = f.readlines()
@@ -22,6 +33,17 @@ def load_graph_file(file_str):
 
 	return weight_matrix, obj[0], obj[1]
 
+def distribute(nitems, nprocs=None):
+    if nprocs is None:
+        nprocs = default_nprocs
+    nitems_per_proc = (nitems+nprocs-1)/nprocs
+    return [(i, min(nitems, i+nitems_per_proc))
+            for i in range(0, nitems, nitems_per_proc)]
+
+def do_random_walk(ants, pheromone_matrix, weight_matrix, b_node, e_node, q):
+	for ant in ants:
+		ant.random_walk(pheromone_matrix, weight_matrix, b_node, e_node)
+		q.put(ant)
 
 class Extractor(object):
 	"""docstring for Extractor"""
@@ -82,21 +104,15 @@ class Outputer(object):
 		n_trials = len(trails)
 		stops = np.zeros(n_trials)
 		best_solution = np.zeros(n_trials)
-		#out += "Trial\t|Converged\t|Best solution\t\n"
 		for i, t in enumerate(trails):
 			stops[i] = t[-1,0]
 			best_solution[i] = max(t[:,1])
-			#out += "#%d\t|" % (i + 1)
-			#out += "%f\t|" % stops[i]
-			#out += "%d\t\n" % best_solution[i]
 			results.add_row([i + 1, stops[i], best_solution[i]])
 
 		results.add_row(["Avg", np.average(stops), np.average(best_solution)])
 		
 		results
-		out += results.get_string()
-		#out += "\tAvg\t|\t%f\t" % np.average(stops)#, np.std(stops)
-		# np.average(best_solution) np.std(best_solution)  
+		out += results.get_string()  
 
 		return out
 
@@ -162,7 +178,7 @@ class Logger(object):
 class AntColony(object):
 
 	"""docstring for AntColony"""
-	def __init__(self, n_ants = 100, iterations = 100, evaporation_rate = 0.3, k = 10, logger=None, random_state=None):
+	def __init__(self, n_ants = 100, iterations = 100, evaporation_rate = 0.3, k = 10, n_jobs = 1, logger=None, random_state=None):
 		super(AntColony, self).__init__()
 		self.pheromone_matrix_ = None
 		
@@ -172,6 +188,8 @@ class AntColony(object):
 		self.n_ants = n_ants
 		self.k = k
 
+		self.n_jobs = default_nprocs if n_jobs < 1 else n_jobs
+
 		# initialize logger if one is given
 		if not (logger == None):
 			logger.init()
@@ -180,10 +198,8 @@ class AntColony(object):
 
 		np.random.seed(random_state)
 		self.random_state = random_state
-		
 
 	def meta_heuristic(self, weight_matrix, b_node, e_node):
-
 		self.create_ants_(self.n_ants)
 		self.init_pheromone_matrix_(weight_matrix, b_node, e_node)
 		
@@ -192,7 +208,6 @@ class AntColony(object):
 
 		best_ants = []
 		for i in xrange(self.iterations):
-			
 			self.generate_solutions_(weight_matrix, b_node, e_node)
 			self.pheromone_update_(self.k)
 			
@@ -211,9 +226,36 @@ class AntColony(object):
 		return max(best_ants, key=attrgetter('path_length_'))
 
 	def generate_solutions_(self, weight_matrix, b_node, e_node):
-		for ant in self.ants_:
-			ant.random_walk(self.pheromone_matrix_, weight_matrix, b_node, e_node)
+		if self.n_jobs > 1:
+			q = Queue() 
+			
+			slices = distribute(self.n_ants, self.n_jobs)
 
+			jobs = [Process(target=do_random_walk, args=(self.ants_[s:e], self.pheromone_matrix_, weight_matrix, b_node, e_node, q)) for (s,e) in slices]
+
+			# Run processes
+			for p in jobs:
+				p.start()
+
+			ants = []
+			liveprocs = list(jobs)
+			while liveprocs:
+				try:
+					while 1:
+					    ants = ants + [(q.get(False))]
+				except Exception, e:
+					pass
+
+				time.sleep(0.005)    # Give tasks a chance to put more data in
+				if not q.empty():
+					continue
+				liveprocs = [p for p in liveprocs if p.is_alive()]
+
+			self.ants_ = ants
+		else:
+			for ant in self.ants_:
+				ant.random_walk(self.pheromone_matrix_, weight_matrix, b_node, e_node)
+		
 	def pheromone_update_(self, k_top = 0):
 		p = self.pheromone_matrix_ * 0.0
 	
@@ -237,6 +279,10 @@ class AntColony(object):
 		self.ants_ = []
 		for i in range(n_ants):
 			self.ants_.append(Ant())
+
+	def init_ants(self, weight_matrix, b_node, e_node):
+		for ant in self.ants_:
+			ant.set_all(self.pheromone_matrix_, weight_matrix, b_node,e_node)
 
 	def init_pheromone_matrix_(self, weight_matrix, b_node, e_node, epsilon = 1.0):
 		if not isinstance(weight_matrix, np.ndarray):
@@ -280,6 +326,7 @@ class Ant(object):
 		return self.path_.T.tolist(), ((1-1/float(self.path_length_)))
 
 	def random_walk(self, pheromone_matrix_, weight_matrix, b_node, e_node):
+		np.random.seed(None)
 		nin_path = np.ones((pheromone_matrix_.shape[0]), dtype=bool)
 		path_length = 0
 
@@ -306,10 +353,14 @@ class Ant(object):
 	def next_node_(self, pheromone_matrix_, c_node, nin_path):
 		p = pheromone_matrix_[c_node, :]
 		n = len(p)
-		p = p[nin_path]/float(p[nin_path].sum())
+		p_sum = float(p[nin_path].sum())
+
+		if p_sum == 0.0:
+			raise Exception()
+		
+		p = p[nin_path]/p_sum
 
 		return np.random.choice(np.arange(n)[nin_path], 1, p=p)[0]
 
 	def __cmp__(self, other):
 		return cmp(self.path_length_, other.path_length_)
-
