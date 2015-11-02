@@ -1,3 +1,4 @@
+```
 usage: main.py [-h] [-n N_ANTS] [-i ITERATIONS] [-e EVAPORATION_RATE]
                [-j JOBS] [-k K_TOP] [--trials TRIALS] [-s] [-d DUMP_FOLDER]
                input
@@ -30,3 +31,4 @@ optional arguments:
   -s, --serialize       Serialize and save in file the solutions.
   -d DUMP_FOLDER, --dump_folder DUMP_FOLDER
                         Logger's dump folder (Default: ./).
+```
