@@ -45,6 +45,43 @@ def do_random_walk(ants, pheromone_matrix, weight_matrix, b_node, e_node, q):
 		ant.random_walk(pheromone_matrix, weight_matrix, b_node, e_node)
 		q.put(ant)
 
+class DynamicUpdate():
+	#Suppose we know the x range
+	min_x = 0
+	max_x = 10
+
+	def add_line(self, xdata=[], ydata=[], marker='k', color="red", label=""):
+		line, = self.ax.plot(xdata, ydata, marker, color=color, label=label)
+		self.lines = self.lines + [line]
+
+	def on_launch(self, max_y=None, min_y=None):
+		#Set up plot
+		self.figure, self.ax = plt.subplots()
+		self.lines = []
+		#Autoscale on unknown axis and known lims on the other
+		self.ax.set_autoscaley_on(True)
+		if not max_y == None and  not min_y == None:
+			plt.ylim(min_y, max_y)
+		#Other stuff
+		self.ax.grid()
+
+	def on_running(self, xdata, ydata, line=0):
+		
+		#self.ax.legend()
+
+		#Update data (with the new _and_ the old points)
+		self.lines[line].set_xdata(xdata)
+		self.lines[line].set_ydata(ydata)
+		#Need both of these in order to rescale
+		self.ax.relim()
+		self.ax.autoscale_view()
+		#We need to draw *and* flush
+		self.figure.canvas.draw()
+		self.figure.canvas.flush_events()
+
+	def on_exit(self):
+		self.ax.close()
+
 class Extractor(object):
 	"""docstring for Extractor"""
 	def __init__(self, header=False, comments="#", delimiter=" "):
@@ -100,7 +137,8 @@ class Outputer(object):
 		else:
 			trails = np.split(dump, split_points)
 
-		results = PrettyTable(["Trial", "Iterations", "Best solution"])		
+		results = PrettyTable(["Trial", "Iterations", "Best solution"])
+
 		n_trials = len(trails)
 		stops = np.zeros(n_trials)
 		best_solution = np.zeros(n_trials)
@@ -109,7 +147,7 @@ class Outputer(object):
 			best_solution[i] = max(t[:,1])
 			results.add_row([i + 1, stops[i], best_solution[i]])
 
-		results.add_row(["Avg", np.average(stops), np.average(best_solution)])
+		results.add_row(["Avg", "%f(%f)" % (np.average(stops),np.std(stops)) , "%f(%f)" % (np.average(best_solution),np.std(best_solution))])
 		
 		results
 		out += results.get_string()  
@@ -122,6 +160,44 @@ class Outputer(object):
 	def _format_output(self, output_file, extractor=Extractor(header=True)):
 		setup, dump = extractor.extract(output_file)
 		return self._format(eval(setup), dump)
+
+class Displayer(Outputer):
+	"""docstring for Displayer"""
+	def __init__(self):
+		super(Displayer, self).__init__()
+		d = DynamicUpdate()
+		d.on_launch()
+		
+		d.add_line(color='green', label="best gen fitness")
+		d.add_line(color="red", label="worst gen fitness")
+		d.add_line(color="black", label="avg fitness")
+		d.add_line(color="blue", label="best indv fitness")
+		self.d = d;
+
+	def _format(self, setup, dump):
+		d = self.d
+
+		split_points = np.where(dump[:,0] == 0)[0][1:]
+		if split_points == []:
+			trails = [dump]		
+		else:
+			trails = np.split(dump, split_points)
+
+		t = trails[0]
+		# best invidual at i-th iteration 
+		d.on_running(t[:,0], t[:,1], 0)
+		# worst invidual at i-th iteration
+		d.on_running(t[:,0], t[:,2], 1)
+		# average invidual at i-th iteration
+		d.on_running(t[:,0], t[:,3], 2)
+		# best until the i-th iteration
+		d.on_running(t[:,0], np.maximum.accumulate(t[:,1]), 3)
+		plt.title(str(setup))
+		plt.show()
+
+		return super(Displayer, self)._format(setup, dump)
+
+
 
 class Logger(object):
 	"""docstring for Logger"""
