@@ -407,7 +407,7 @@ class Ant(object):
 		path_length = 0
 
 		nin_path[b_node] = False
-		next_node = self.next_node_(pheromone_matrix_, b_node, nin_path)
+		next_node = self.next_node_(pheromone_matrix_, weight_matrix,b_node, nin_path)
 		path = np.array([[b_node, next_node]])
 		path_length = path_length + weight_matrix[b_node, next_node]
 		while not (next_node == e_node):
@@ -415,7 +415,7 @@ class Ant(object):
 			nin_path[current_node] = False
 
 			try:
-				next_node = self.next_node_(pheromone_matrix_, current_node, nin_path)
+				next_node = self.next_node_(pheromone_matrix_, weight_matrix, current_node, nin_path)
 				path = np.append(path, [[current_node, next_node]], axis=0)
 				path_length = path_length + weight_matrix[current_node,next_node]
 			except Exception, e: 
@@ -426,15 +426,16 @@ class Ant(object):
 		self.path_= path
 		
 
-	def next_node_(self, pheromone_matrix_, c_node, nin_path):
+	def next_node_(self, pheromone_matrix_, weight_matrix,  c_node, nin_path):
 		p = pheromone_matrix_[c_node, :]
+		w = weight_matrix[c_node, :]
 		n = len(p)
-		p_sum = float(p[nin_path].sum())
+		norm = float(np.dot(p[nin_path],w[nin_path]))
 
-		if p_sum == 0.0:
+		if norm == 0.0:
 			raise Exception()
 		
-		p = p[nin_path]/p_sum
+		p = (p[nin_path]*w[nin_path])/norm
 
 		return np.random.choice(np.arange(n)[nin_path], 1, p=p)[0]
 
