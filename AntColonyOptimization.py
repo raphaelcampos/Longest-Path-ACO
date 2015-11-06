@@ -251,12 +251,78 @@ class Logger(object):
 	def running_summary(self):
 		return self.outputer.format(self)
 
+class Ant(object):
+	"""It's artificial agent responsible for walking
+		on the graph from a node S to a node T.
+		It performs a random walk accordingly to
+		a transition matrix which is obtained from
+		the pheromone matrix depending on the probability
+		rule described in the method next_node_
+	"""
+	def __init__(self, alpha=1.0, beta=1.0):
+		super(Ant, self).__init__()
+		self.path_length_ = 0
+		self.path_ = None
+		self.alpha = alpha
+		self.beta = beta
+
+	def release_pheromone(self):
+		return self.path_.T.tolist(), ((1-1/float(self.path_length_)))
+
+	def random_walk(self, pheromone_matrix_, weight_matrix, b_node, e_node):
+		np.random.seed(None)
+		nin_path = np.ones((pheromone_matrix_.shape[0]), dtype=bool)
+		path_length = 0
+
+		nin_path[b_node] = False
+		next_node = self.next_node_(pheromone_matrix_, weight_matrix,b_node, nin_path)
+		path = np.array([[b_node, next_node]])
+		path_length = path_length + weight_matrix[b_node, next_node]
+		while not (next_node == e_node):
+			current_node = next_node
+			nin_path[current_node] = False
+
+			try:
+				next_node = self.next_node_(pheromone_matrix_, weight_matrix, current_node, nin_path)
+				path = np.append(path, [[current_node, next_node]], axis=0)
+				path_length = path_length + weight_matrix[current_node,next_node]
+			except Exception, e: 
+				path_length = 1
+				break
+
+		self.path_length_ = path_length		
+		self.path_= path
+		
+
+	def next_node_(self, pheromone_matrix_, weight_matrix,  c_node, nin_path):
+		p = pheromone_matrix_[c_node, :]
+		w = weight_matrix[c_node, :]
+		n = len(p)
+
+		p = np.power(p[nin_path], self.alpha)
+		w = np.power(w[nin_path], self.beta)
+		
+		norm = float(np.dot(p , w))
+
+		if norm == 0.0:
+			raise Exception()
+		
+		p = (p*w)/norm
+
+		return np.random.choice(np.arange(n)[nin_path], 1, p=p)[0]
+
+	def __cmp__(self, other):
+		return cmp(self.path_length_, other.path_length_)
+
 class AntColony(object):
 
 	"""docstring for AntColony"""
-	def __init__(self, n_ants = 100, iterations = 100, evaporation_rate = 0.3, k = 10, n_jobs = 1, logger=None, random_state=None):
+	def __init__(self, base_ant=Ant(), n_ants = 100, iterations = 100, evaporation_rate = 0.3, k = 10, n_jobs = 1, logger=None, random_state=None):
 		super(AntColony, self).__init__()
+
 		self.pheromone_matrix_ = None
+
+		self.base_ant = base_ant
 		
 		self.iterations = iterations
 		self.evaporation_rate = evaporation_rate
@@ -354,7 +420,8 @@ class AntColony(object):
 	def create_ants_(self, n_ants):
 		self.ants_ = []
 		for i in range(n_ants):
-			self.ants_.append(Ant())
+			ant = copy.copy(self.base_ant)
+			self.ants_.append(ant)
 
 	def init_ants(self, weight_matrix, b_node, e_node):
 		for ant in self.ants_:
@@ -384,60 +451,3 @@ class AntColony(object):
 
 			dump = [iteration, best_ant.path_length_,  worst_ant.path_length_, avg_path, std_path]
 			self.logger.collect(np.array(dump).reshape(1,len(dump)))
-
-class Ant(object):
-	"""It's artificial agent responsible for walking
-		on the graph from a node S to a node T.
-		It performs a random walk accordingly to
-		a transition matrix which is obtained from
-		the pheromone matrix depending on the probability
-		rule described in the method next_node_
-	"""
-	def __init__(self):
-		super(Ant, self).__init__()
-		self.path_length_ = 0
-		self.path_ = None
-
-	def release_pheromone(self):
-		return self.path_.T.tolist(), ((1-1/float(self.path_length_)))
-
-	def random_walk(self, pheromone_matrix_, weight_matrix, b_node, e_node):
-		np.random.seed(None)
-		nin_path = np.ones((pheromone_matrix_.shape[0]), dtype=bool)
-		path_length = 0
-
-		nin_path[b_node] = False
-		next_node = self.next_node_(pheromone_matrix_, weight_matrix,b_node, nin_path)
-		path = np.array([[b_node, next_node]])
-		path_length = path_length + weight_matrix[b_node, next_node]
-		while not (next_node == e_node):
-			current_node = next_node
-			nin_path[current_node] = False
-
-			try:
-				next_node = self.next_node_(pheromone_matrix_, weight_matrix, current_node, nin_path)
-				path = np.append(path, [[current_node, next_node]], axis=0)
-				path_length = path_length + weight_matrix[current_node,next_node]
-			except Exception, e: 
-				path_length = 1
-				break
-
-		self.path_length_ = path_length		
-		self.path_= path
-		
-
-	def next_node_(self, pheromone_matrix_, weight_matrix,  c_node, nin_path):
-		p = pheromone_matrix_[c_node, :]
-		w = weight_matrix[c_node, :]
-		n = len(p)
-		norm = float(np.dot(p[nin_path],w[nin_path]))
-
-		if norm == 0.0:
-			raise Exception()
-		
-		p = (p[nin_path]*w[nin_path])/norm
-
-		return np.random.choice(np.arange(n)[nin_path], 1, p=p)[0]
-
-	def __cmp__(self, other):
-		return cmp(self.path_length_, other.path_length_)
